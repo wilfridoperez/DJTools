@@ -1,5 +1,5 @@
 import pygame
-
+import os
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
@@ -22,6 +22,9 @@ channel_a = pygame.mixer.Channel(0)
 channel_b = pygame.mixer.Channel(1)
 sound_a = None
 sound_b = None
+
+label_a = None
+label_b = None
 
 bpm_a = None
 bpm_b = None
@@ -56,11 +59,32 @@ def detect_bpm(file_path):
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     return tempo
 
+def StopStartChannel(channel):
+    """Stop the channel if it's playing, otherwise start it."""
+    if channel == 0 and sound_a != None:
+        if channel_a.get_busy():
+            channel_a.stop()
+            return True
+        else:
+            channel_a.play(sound_a, loops=-1)
+            return True
+    elif channel == 1 and sound_b != None:
+        if channel_b.get_busy():
+            channel_b.stop()
+            return True
+        else:
+            channel_b.play(sound_b, loops=-1)
+            return True
+    return False
+
 def load_track(channel):
-    global sound_a, sound_b, bpm_a, bpm_b, path_a, path_b, play_start_a, play_start_b
+    global label_a, label_b, sound_a, sound_b, bpm_a, bpm_b, path_a, path_b, play_start_a, play_start_b
+
+    
     file_path = filedialog.askopenfilename(filetypes=[("MP3 Files", "*.mp3")])
     if file_path:
         bpm = detect_bpm(file_path)
+        song_name = os.path.basename(file_path)
        # print(f"Detected BPM for Deck {'A' if channel == 0 else 'B'}: {bpm:.2f}")
 
         if channel == 0:
@@ -69,12 +93,14 @@ def load_track(channel):
             sound_a = pygame.mixer.Sound(file_path)
             channel_a.play(sound_a, loops=-1)
             play_start_a = time.time()
+            label_a.config(text=song_name)
         else:
             path_b = file_path
             bpm_b = bpm
             sound_b = pygame.mixer.Sound(file_path)
             channel_b.play(sound_b, loops=-1)
             play_start_b = time.time()
+            label_b.config(text=song_name)
 
 def stop_tracks():
     pygame.mixer.stop()
@@ -136,14 +162,6 @@ def live_waveform(audio_segment, title):
     ani = FuncAnimation(fig, update, frames=range(0, len(samples) // audio_segment.frame_rate), interval=100, blit=True)
     plt.show()
 
-def start_waveform_visual123(channel):
-    if channel == 0 and path_a:
-        audio = AudioSegment.from_file(path_a)
-        live_waveform(audio, "Deck A")
-    elif channel == 1 and path_b:
-        audio = AudioSegment.from_file(path_b)
-        live_waveform(audio, "Deck B")
-
 def live_waveform_sync(audio_segment, title, channel):
     global play_start_a, play_start_b
     samples = np.array(audio_segment.get_array_of_samples())
@@ -203,6 +221,49 @@ def start_waveform_visual_thread(channel):
         audio = AudioSegment.from_file(path_b)
         threading.Thread(target=live_waveform_sync, args=(audio, "Deck B", 1), daemon=True).start()
 
+def set_tempo(channel, value):
+    """Change the tempo of the selected deck, resuming from current play position."""
+    global sound_a, sound_b, path_a, path_b, channel_a, channel_b, play_start_a, play_start_b
+
+    tempo_percent = float(value)
+    rate = 2 ** (tempo_percent / 100)  # 0.5x at -100, 2x at +100
+
+    if channel == 0 and path_a and play_start_a is not None:
+        # Calculate current play position in ms
+        elapsed = (time.time() - play_start_a)
+        audio = AudioSegment.from_file(path_a)
+        pos_ms = int(elapsed * 1000)
+        if pos_ms >= len(audio):
+            return  # Song ended
+        # Slice from current position
+        audio = audio[pos_ms:]
+        # Change tempo
+        new_audio = audio._spawn(audio.raw_data, overrides={
+            "frame_rate": int(audio.frame_rate * rate)
+        }).set_frame_rate(audio.frame_rate)
+        # Save to temp file and reload into pygame
+        with NamedTemporaryFile(delete=False, suffix=".wav") as f:
+            new_audio.export(f.name, format="wav")
+            sound_a = pygame.mixer.Sound(f.name)
+            channel_a.play(sound_a, loops=-1)
+            play_start_a = time.time()
+    elif channel == 1 and path_b and play_start_b is not None:
+        elapsed = (time.time() - play_start_b)
+        audio = AudioSegment.from_file(path_b)
+        pos_ms = int(elapsed * 1000)
+        if pos_ms >= len(audio):
+            return
+        audio = audio[pos_ms:]
+        new_audio = audio._spawn(audio.raw_data, overrides={
+            "frame_rate": int(audio.frame_rate * rate)
+        }).set_frame_rate(audio.frame_rate)
+        with NamedTemporaryFile(delete=False, suffix=".wav") as f:
+            new_audio.export(f.name, format="wav")
+            sound_b = pygame.mixer.Sound(f.name)
+            channel_b.play(sound_b, loops=-1)
+            play_start_b = time.time()
+
+'''
 # UI Elements
 tk.Button(root, text="Load Track A", command=lambda: load_track(0)).pack()
 tk.Button(root, text="Load Track B", command=lambda: load_track(1)).pack()
@@ -228,10 +289,77 @@ cross.pack()
 tk.Button(root, text="Sync B to A", command=sync_bpm).pack()
 tk.Button(root, text="Stop All", command=stop_tracks).pack()
 
-#tk.Button(root, text="Visualize Deck A", command=lambda: start_waveform_visual(0)).pack()
-#tk.Button(root, text="Visualize Deck B", command=lambda: start_waveform_visual(1)).pack()
 
 tk.Button(root, text="Visualize Deck A", command=lambda: start_waveform_visual_thread(0)).pack()
 tk.Button(root, text="Visualize Deck B", command=lambda: start_waveform_visual_thread(1)).pack()
+
+root.mainloop()
+'''
+
+# --- Top Bar ---
+top_frame = tk.Frame(root, bg="#23252a")
+top_frame.pack(fill="x", pady=10)
+
+tk.Button(top_frame, text="+", bg="#333", fg="white", font=("Arial", 16), width=2, relief="flat",  command=lambda: load_track(0)).pack(side="left", padx=10)
+label_a = tk.Label(top_frame, text="DJ FREE", bg="#23252a", fg="#888", font=("Arial", 18, "bold"))
+label_a.pack(side="left", expand=True)
+label_b = tk.Label(top_frame, text="DJ FREE", bg="#23252a", fg="#888", font=("Arial", 18, "bold"))
+label_b.pack(side="right", expand=True)
+tk.Button(top_frame, text="+", bg="#333", fg="white", font=("Arial", 16), width=2, relief="flat", command=lambda: load_track(1)).pack(side="right", padx=10)
+
+# --- Decks Frame ---
+decks_frame = tk.Frame(root, bg="#23252a")
+decks_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+# --- Left Deck ---
+left_deck = tk.Frame(decks_frame, bg="#23252a")
+left_deck.pack(side="left", expand=True, fill="both", padx=10)
+
+tempo_a = tk.Scale(left_deck, from_=-100, to=100, orient="vertical", length=200, bg="#23252a", fg="white", troughcolor="#444", highlightthickness=0, label="TEMPO", command=lambda v: set_tempo(0, v))
+tempo_a.set(0)
+tempo_a.pack(side="left", padx=10)
+
+canvas_a = tk.Canvas(left_deck, width=180, height=180, bg="#23252a", highlightthickness=0)
+canvas_a.pack()
+canvas_a.create_oval(10, 10, 170, 170, fill="#ff9900", outline="#ff9900")
+canvas_a.create_polygon(90, 60, 120, 90, 90, 120, fill="white")  # Play triangle
+
+btn_frame_a = tk.Frame(left_deck, bg="#23252a")
+btn_frame_a.pack(pady=10)
+tk.Button(btn_frame_a, text="CUE", width=6, bg="#444", fg="white", command=lambda: print("CUE A")).pack(side="left", padx=5)
+tk.Button(btn_frame_a, text="▶", width=6, bg="#444", fg="white", command=lambda: StopStartChannel(0)).pack(side="left", padx=5)
+tk.Button(btn_frame_a, text="SYNC", width=6, bg="#444", fg="white", command=sync_bpm).pack(side="left", padx=5)
+
+# --- Right Deck ---
+right_deck = tk.Frame(decks_frame, bg="#23252a")
+right_deck.pack(side="right", expand=True, fill="both", padx=10)
+
+tempo_b = tk.Scale(right_deck, from_=-100, to=100, orient="vertical", length=200, bg="#23252a", fg="white", troughcolor="#444", highlightthickness=0, label="TEMPO", command=lambda v: set_tempo(1, v))
+tempo_b.set(0)
+tempo_b.pack(side="right", padx=10)
+
+canvas_b = tk.Canvas(right_deck, width=180, height=180, bg="#23252a", highlightthickness=0)
+canvas_b.pack()
+canvas_b.create_oval(10, 10, 170, 170, fill="#0099ff", outline="#0099ff")
+canvas_b.create_polygon(90, 60, 120, 90, 90, 120, fill="white")  # Play triangle
+
+btn_frame_b = tk.Frame(right_deck, bg="#23252a")
+btn_frame_b.pack(pady=10)
+
+tk.Button(btn_frame_b, text="CUE", width=6, bg="#444", fg="white", command=lambda: print("CUE B")).pack(side="left", padx=5)
+tk.Button(btn_frame_b, text="▶", width=6, bg="#444", fg="white", command=lambda: StopStartChannel(1)).pack(side="left", padx=5)
+tk.Button(btn_frame_b, text="SYNC", width=6, bg="#444", fg="white", command=sync_bpm).pack(side="left", padx=5)
+
+# --- Crossfader ---
+crossfader_frame = tk.Frame(root, bg="#23252a")
+crossfader_frame.pack(pady=10)
+tk.Scale(crossfader_frame, from_=0, to=1, orient="horizontal", length=300, resolution=0.01, bg="#23252a", fg="white", troughcolor="#444", highlightthickness=0, command=set_crossfade).pack()
+
+# --- Stop/Visualize Buttons ---
+bottom_frame = tk.Frame(root, bg="#23252a")
+bottom_frame.pack(pady=10)
+tk.Button(bottom_frame, text="Stop All", command=stop_tracks, bg="#444", fg="white").pack(side="left", padx=10)
+tk.Button(bottom_frame, text="Visualize Deck A", command=lambda: start_waveform_visual_thread(0), bg="#444", fg="white").pack(side="left", padx=10)
+tk.Button(bottom_frame, text="Visualize Deck B", command=lambda: start_waveform_visual_thread(1), bg="#444", fg="white").pack(side="left", padx=10)
 
 root.mainloop()
