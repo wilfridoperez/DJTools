@@ -1,6 +1,9 @@
 import pygame
+
 import tkinter as tk
 from tkinter import filedialog
+from tkinter import ttk
+
 from pydub import AudioSegment
 import numpy as np
 import matplotlib.pyplot as plt
@@ -184,13 +187,21 @@ def live_waveform_sync(audio_segment, title, channel):
     ani = FuncAnimation(fig, update, interval=50, blit=True)
     plt.show()
 
-def start_waveform_visual(channel):
+def start_waveform_visual_monoThread(channel):
     if channel == 0 and path_a:
         audio = AudioSegment.from_file(path_a)
         live_waveform_sync(audio, "Deck A", 0)
     elif channel == 1 and path_b:
         audio = AudioSegment.from_file(path_b)
         live_waveform_sync(audio, "Deck B", 1)
+
+def start_waveform_visual_thread(channel):
+    if channel == 0 and path_a:
+        audio = AudioSegment.from_file(path_a)
+        threading.Thread(target=live_waveform_sync, args=(audio, "Deck A", 0), daemon=True).start()
+    elif channel == 1 and path_b:
+        audio = AudioSegment.from_file(path_b)
+        threading.Thread(target=live_waveform_sync, args=(audio, "Deck B", 1), daemon=True).start()
 
 # UI Elements
 tk.Button(root, text="Load Track A", command=lambda: load_track(0)).pack()
@@ -217,7 +228,10 @@ cross.pack()
 tk.Button(root, text="Sync B to A", command=sync_bpm).pack()
 tk.Button(root, text="Stop All", command=stop_tracks).pack()
 
-tk.Button(root, text="Visualize Deck A", command=lambda: start_waveform_visual(0)).pack()
-tk.Button(root, text="Visualize Deck B", command=lambda: start_waveform_visual(1)).pack()
+#tk.Button(root, text="Visualize Deck A", command=lambda: start_waveform_visual(0)).pack()
+#tk.Button(root, text="Visualize Deck B", command=lambda: start_waveform_visual(1)).pack()
+
+tk.Button(root, text="Visualize Deck A", command=lambda: start_waveform_visual_thread(0)).pack()
+tk.Button(root, text="Visualize Deck B", command=lambda: start_waveform_visual_thread(1)).pack()
 
 root.mainloop()
