@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog
 import sounddevice as sd
-import soundfile as sf
+import soundfile as sfss
 import numpy as np
 import threading
 import time
