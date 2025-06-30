@@ -60,20 +60,53 @@ def detect_bpm(file_path):
     return tempo
 
 def StopStartChannel(channel):
-    """Stop the channel if it's playing, otherwise start it."""
-    if channel == 0 and sound_a != None:
+    global sound_a, sound_b, play_start_a, play_start_b, pause_pos_a, pause_pos_b, path_a, path_b
+
+    # Add pause position globals if not already present
+    try:
+        pause_pos_a
+    except NameError:
+        pause_pos_a = 0
+    try:
+        pause_pos_b
+    except NameError:
+        pause_pos_b = 0
+
+    if channel == 0 and sound_a is not None:
         if channel_a.get_busy():
+            # Stop and record position
+            pause_pos_a = time.time() - play_start_a
             channel_a.stop()
             return True
         else:
-            channel_a.play(sound_a, loops=-1)
+            # Resume from pause position
+            audio = AudioSegment.from_file(path_a)
+            pos_ms = int(pause_pos_a * 1000)
+            if pos_ms >= len(audio):
+                return False  # End of song
+            audio = audio[pos_ms:]
+            with NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                audio.export(f.name, format="wav")
+                sound_a = pygame.mixer.Sound(f.name)
+                channel_a.play(sound_a, loops=-1)
+                play_start_a = time.time() - pause_pos_a  # Adjust start time
             return True
-    elif channel == 1 and sound_b != None:
+    elif channel == 1 and sound_b is not None:
         if channel_b.get_busy():
+            pause_pos_b = time.time() - play_start_b
             channel_b.stop()
             return True
         else:
-            channel_b.play(sound_b, loops=-1)
+            audio = AudioSegment.from_file(path_b)
+            pos_ms = int(pause_pos_b * 1000)
+            if pos_ms >= len(audio):
+                return False
+            audio = audio[pos_ms:]
+            with NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                audio.export(f.name, format="wav")
+                sound_b = pygame.mixer.Sound(f.name)
+                channel_b.play(sound_b, loops=-1)
+                play_start_b = time.time() - pause_pos_b
             return True
     return False
 
