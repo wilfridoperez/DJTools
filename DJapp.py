@@ -7,6 +7,11 @@ import threading
 import time
 import os
 
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+
 root = tk.Tk()
 root.title("DJ Mixer with Crossfader, Waveform, and BPM Sync")
 root.configure(bg="#23252a")
@@ -63,6 +68,36 @@ def set_crossfade(value):
 
 def set_tempo(channel, value):
     deck[channel]["tempo"] = 2 ** (float(value) / 100)  # -100 to 100 -> 0.5x to 2x
+def show_waveform_panel(deck_idx, parent_frame):
+    # Only call this after a track is loaded!
+    data = deck[deck_idx]["data"]
+    sr = deck[deck_idx]["sr"]
+    if data is None:
+        return
+
+    # Flatten stereo to mono for display
+    if data.shape[1] > 1:
+        plot_data = data.mean(axis=1)
+    else:
+        plot_data = data[:,0]
+
+    fig, ax = plt.subplots(figsize=(5, 1.5), dpi=100)
+    ax.plot(np.linspace(0, len(plot_data)/sr, len(plot_data)), plot_data, color='orange' if deck_idx==0 else 'deepskyblue')
+    progress_line = ax.axvline(0, color='red', lw=2)
+    ax.set_xlim(0, len(plot_data)/sr)
+    ax.set_ylim(-1, 1)
+    ax.axis('off')
+
+    canvas = FigureCanvasTkAgg(fig, master=parent_frame)
+    canvas.get_tk_widget().pack(fill="x", padx=10, pady=5)
+
+    def update_progress():
+        if deck[deck_idx]["playing"]:
+            pos_sec = deck[deck_idx]["pos"] / sr
+            progress_line.set_xdata([pos_sec, pos_sec])
+            canvas.draw()
+        parent_frame.after(50, update_progress)
+
 
 def play_stream(channel):
     d = deck[channel]
@@ -139,5 +174,6 @@ tk.Button(right_deck, text="▶", width=6, bg="#444", fg="white", command=lambda
 crossfader_frame = tk.Frame(root, bg="#23252a")
 crossfader_frame.pack(pady=10)
 tk.Scale(crossfader_frame, from_=0, to=1, orient="horizontal", length=300, resolution=0.01, bg="#23252a", fg="white", troughcolor="#444", highlightthickness=0, command=set_crossfade).pack()
-
+waveform_frame_a = tk.Frame(left_deck, bg="#23252a")
+waveform_frame_a.pack(fill="x")
 root.mainloop()
