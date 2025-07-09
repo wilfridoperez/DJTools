@@ -156,6 +156,22 @@ def detect_bpm(file_path):
 #    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     return round(100) #tempo)
 
+def sync_bpm():
+    # Sync Deck B to Deck A
+    bpm_a = deck[0].get("bpm", None)
+    bpm_b = deck[1].get("bpm", None)
+    if bpm_a and bpm_b and bpm_b > 0:
+        # Calculate the tempo multiplier needed for Deck B
+        tempo_ratio = bpm_a / bpm_b
+        # Convert to slider value: tempo = 2 ** (slider/100) => slider = 100 * log2(tempo)
+        slider_value = 100 * np.log2(tempo_ratio)
+        # Clamp slider value to -100..100
+        slider_value = max(-100, min(100, slider_value))
+        # Set the tempo for Deck B
+        deck[1]["tempo"] = 2 ** (slider_value / 100)
+        # Update the tempo slider visually if you want:
+        tempo_b.set(slider_value)
+
 # --- Top Bar ---
 top_frame = tk.Frame(root, bg="#23252a")
 top_frame.pack(fill="x", pady=10)
@@ -214,6 +230,11 @@ tk.Button(
     right_deck, text="▶", width=6, bg="#444", fg="black",
     activebackground="#555", activeforeground="white",
     command=lambda: play_pause(1)
+).pack(pady=5)
+tk.Button(
+    right_deck, text="SYNC", width=6, bg="#555", fg="black",
+    activebackground="#555", activeforeground="white",
+    command=sync_bpm
 ).pack(pady=5)
 
 # --- Crossfader ---
