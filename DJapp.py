@@ -6,6 +6,7 @@ import numpy as np
 import threading
 import time
 import os
+import librosa
 
 import matplotlib
 matplotlib.use("TkAgg")
@@ -15,6 +16,11 @@ import matplotlib.pyplot as plt
 root = tk.Tk()
 root.title("DJ Mixer with Crossfader, Waveform, and BPM Sync")
 root.configure(bg="#23252a")
+
+# Bring window to front
+root.lift()
+root.attributes('-topmost', True)
+root.after(100, lambda: root.attributes('-topmost', False))
 
 # Globals for Decks
 deck = [
@@ -35,8 +41,15 @@ def load_track(channel):
     deck[channel]["pos"] = 0
     deck[channel]["file"] = file_path
     deck[channel]["tempo"] = 1.0
-    deck[channel]["label"].config(text=os.path.basename(file_path))
-   # show_waveform_panel(0, waveform_frame_a)
+
+    # Detect BPM
+    bpm = detect_bpm(file_path)
+    deck[channel]["bpm"] = bpm  # Optionally store it
+
+    # Update label to show song name and BPM
+    song_name = os.path.basename(file_path)
+    deck[channel]["label"].config(text=f"{song_name} | {bpm} BPM")
+
     stop_deck(channel)
 
 def play_pause(channel):
@@ -64,8 +77,8 @@ def set_volume(channel, value):
 
 def set_crossfade(value):
     global crossfade
-    crossfade = float(value)
-    # Optionally, adjust deck volumes here for crossfade effect
+    # Convert from -100..100 to 0..1
+    crossfade = (float(value) + 100) / 200
 
 def set_tempo(channel, value):
     deck[channel]["tempo"] = 2 ** (float(value) / 100)  # -100 to 100 -> 0.5x to 2x
@@ -138,11 +151,16 @@ def play_stream(channel):
     d["stream"].close()
     d["stream"] = None
 
+def detect_bpm(file_path):
+#    y, sr = librosa.load(file_path, sr=None, mono=True)
+#    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    return round(100) #tempo)
+
 # --- Top Bar ---
 top_frame = tk.Frame(root, bg="#23252a")
 top_frame.pack(fill="x", pady=10)
 tk.Button(
-    top_frame, text="+", bg="#333", fg="white",
+    top_frame, text="+", bg="#555", fg="black",
     activebackground="#444", activeforeground="white",
     font=("Arial", 16), width=2, relief="flat",
     command=lambda: load_track(0)
@@ -154,7 +172,7 @@ label_b = tk.Label(top_frame, text="DJ FREE", bg="#23252a", fg="#888", font=("Ar
 label_b.pack(side="right", expand=True)
 deck[1]["label"] = label_b
 tk.Button(
-    top_frame, text="+", bg="#333", fg="white",
+    top_frame, text="+", bg="#555", fg="black",
     activebackground="#444", activeforeground="white",
     font=("Arial", 16), width=2, relief="flat",
     command=lambda: load_track(1)
@@ -171,12 +189,12 @@ tempo_a = tk.Scale(left_deck, from_=-100, to=100, orient="vertical", length=200,
 tempo_a.set(0)
 tempo_a.pack(side="left", padx=10)
 tk.Button(
-    left_deck, text="CUE", width=6, bg="#444", fg="white",
+    left_deck, text="CUE", width=6, bg="#555", fg="black",
     activebackground="#555", activeforeground="white",
     command=lambda: stop_deck(0)
 ).pack(pady=5)
 tk.Button(
-    left_deck, text="▶", width=6, bg="#444", fg="white",
+    left_deck, text="▶", width=6, bg="#555", fg="black",
     activebackground="#555", activeforeground="white",
     command=lambda: play_pause(0)
 ).pack(pady=5)
@@ -188,12 +206,12 @@ tempo_b = tk.Scale(right_deck, from_=-100, to=100, orient="vertical", length=200
 tempo_b.set(0)
 tempo_b.pack(side="right", padx=10)
 tk.Button(
-    right_deck, text="CUE", width=6, bg="#444", fg="white",
-    activebackground="#555", activeforeground="white",
+    right_deck, text="CUE", width=6, bg="#555", fg="black",
+    activebackground="#555", activeforeground="red",
     command=lambda: stop_deck(1)
 ).pack(pady=5)
 tk.Button(
-    right_deck, text="▶", width=6, bg="#444", fg="white",
+    right_deck, text="▶", width=6, bg="#444", fg="black",
     activebackground="#555", activeforeground="white",
     command=lambda: play_pause(1)
 ).pack(pady=5)
@@ -201,7 +219,13 @@ tk.Button(
 # --- Crossfader ---
 crossfader_frame = tk.Frame(root, bg="#23252a")
 crossfader_frame.pack(pady=10)
-tk.Scale(crossfader_frame, from_=0, to=1, orient="horizontal", length=300, resolution=0.01, bg="#23252a", fg="white", troughcolor="#444", highlightthickness=0, command=set_crossfade).pack()
+tk.Scale(
+    crossfader_frame,
+    from_=-100, to=100, orient="horizontal", length=300,
+    resolution=1, bg="#23252a", fg="white", troughcolor="#444",
+    highlightthickness=0, command=set_crossfade,
+    label="CROSSFADER"
+).pack()
 
 waveform_frame_a = tk.Frame(left_deck, bg="#23252a")
 waveform_frame_a.pack(fill="x")
